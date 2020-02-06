@@ -1,21 +1,13 @@
-from subprocess import Popen, getoutput, check_output
+from subprocess import Popen, check_output
 from threading import Timer
 from os import path
 
-version_file_name = 'curent_version'
-def get_current_commit(soft_path: str) -> str:
-	f_path = path.join(soft_path, version_file_name)
-	if not path.isfile(f_path):
-		return ''
-	with open(f_path, 'r') as f:
-		return f.read().strip()
-
-def set_current_commit(soft_path: str, commit: str) -> None:
-	with open(path.join(soft_path, version_file_name), 'w') as f:
-		f.write(commit)
+def get_current_commit(soft_path: str, git_repo_url: str) -> str:
+	output = check_output('git rev-parse HEAD'.split(), shell=True, cwd=soft_path).decode('utf-8')
+	return output.strip()
 
 def get_commit_from_git(git_repo_url: str, prod_branch: str) -> str:
-	output = getoutput(['git', 'ls-remote', git_repo_url])
+	output = check_output(f'git ls-remote {git_repo_url}'.split(), shell=True).decode('utf-8')
 	for l in output.split('\n'):
 		commit, branch = l.split('\t')[:2]
 		if branch == 'refs/heads/' + prod_branch:
@@ -31,17 +23,17 @@ def pull_last_version(soft_path: str, git_repo_url: str, prod_branch: str) -> No
 		out = check_output(cmd.split(' '), shell=True, cwd=soft_path)
 
 def try_update(soft_path: str, startup_command: str, git_repo_url: str, prod_branch: str) -> bool:
-	cur_ver = get_current_commit(soft_path)
+	cur_ver = get_current_commit(soft_path, git_repo_url)
 	last_ver = get_commit_from_git(git_repo_url, prod_branch)
 	res = cur_ver != last_ver
 	if res:
 		pull_last_version(soft_path, git_repo_url, prod_branch)
-		set_current_commit(soft_path, last_ver)
 	return res
 
 pipe: Popen = None
-def process_timer(soft_path: str, startup_command: str, git_repo_url: str, prod_branch: str, allow_shut_down: bool):
+def process(soft_path: str, startup_command: str, git_repo_url: str, prod_branch: str, allow_shut_down: bool, interval: int, kwargs) -> None:
 	global pipe
+	Timer(args.mins * 60, process, kwargs=kwargs).start()
 	updated = try_update(soft_path, startup_command, git_repo_url, prod_branch)
 	if updated and allow_shut_down and pipe is not None:
 		pipe.terminate()
@@ -65,8 +57,8 @@ if __name__ == '__main__':
 		'git_repo_url': args.git,
 		'prod_branch': args.branch,
 		'allow_shut_down': not args.disallowShutDown,
+		'interval': args.mins,
 	}
-	process_timer(**kwargs) # first call
-	t = Timer(args.mins * 60, process_timer, kwargs=kwargs)
-	t.start()
+	kwargs['kwargs'] = kwargs # kwargs is kek:)
+	process(**kwargs) # first call
 	input('Process starting, press any key to shut down')

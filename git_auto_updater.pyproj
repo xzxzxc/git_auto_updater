@@ -13,7 +13,8 @@
     <Name>git_auto_updater</Name>
     <RootNamespace>github_auto_updater</RootNamespace>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>-p D:\TOOLS\SHTDWN\ -c .\local_server.bat  -g https://github.com/xzxzxc/pc_control_local -m 1</CommandLineArguments>
+    <CommandLineArguments>
+    </CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
