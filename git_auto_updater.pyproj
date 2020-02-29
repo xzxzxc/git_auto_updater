@@ -13,8 +13,7 @@
     <Name>git_auto_updater</Name>
     <RootNamespace>github_auto_updater</RootNamespace>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>
-    </CommandLineArguments>
+    <CommandLineArguments>-p . -g https://github.com/xzxzxc/git_auto_updater.git -c "py git_auto_updater.py"</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">

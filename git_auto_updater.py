@@ -2,43 +2,64 @@ from subprocess import Popen, check_output
 from threading import Timer
 from os import path
 
-def get_local_commit(soft_path: str, git_repo_url: str) -> str:
-	return check_output('git rev-parse HEAD'.split(), shell=True, cwd=soft_path).decode('utf-8').strip()
+class RunningContext:
+	git_repo_url: str
+	soft_path: str
 
-def get_remote_commit(git_repo_url: str, prod_branch: str) -> str:
-	output = check_output(f'git ls-remote {git_repo_url}'.split(), shell=True).decode('utf-8')
+running_context = RunningContext()
+
+def exec_commands(*args: str) -> str or list[str]:
+	results: list[str] = []
+	for command in args:
+		results.append(check_output(command.split(), shell=True, cwd=running_context.soft_path).decode('utf-8'))
+	return results if len(results) > 1 else results[0]
+
+def get_current_commit() -> str:
+	return exec_commands('git rev-parse HEAD').strip()
+
+def get_commit_from_git(branch_from: str) -> str:
+	output = exec_commands(f'git ls-remote {running_context.git_repo_url}')
 	for l in output.split('\n'):
-		parts = l.split('\t')
-		if len(parts) < 2:
-			continue
-		commit, branch = parts[:2]
-		if branch == 'refs/heads/' + prod_branch:
+		commit, branch = l.split('\t')[:2]
+		if branch == 'refs/heads/' + branch_from:
 			return commit
-	raise Exception(f'could not find repo {git_repo_url} or branch {prod_branch}')
+	raise Exception(f'could not find {branch_from} branch in {running_context.git_repo_url}')
 
-def pull_latest_version(soft_path: str, git_repo_url: str, prod_branch: str) -> None:
-	commands = [f'git checkout {prod_branch}', 'git pull'] \
-		if path.isdir(path.join(soft_path, '.git')) \
-		else [f'git clone -b {prod_branch} {git_repo_url} {soft_path}']
-	for cmd in commands:
-		out = check_output(cmd.split(' '), shell=True, cwd=soft_path)
+flatten = lambda l: [item for sublist in l for item in sublist]
+def pull_last_version(branch_from: str) -> None:
+	if not path.isdir(path.join(running_context.soft_path, '.git')):
+		exec_commands(f'git clone -b {branch_from} {running_context.git_repo_url} {running_context.soft_path}')
+		return
 
-def try_update(soft_path: str, startup_command: str, git_repo_url: str, prod_branch: str) -> bool:
-	cur_ver = get_local_commit(soft_path, git_repo_url)
-	last_ver = get_remote_commit(git_repo_url, prod_branch)
+	changes_exists = len(exec_commands('git diff-index HEAD').strip()) > 1
+	if changes_exists:
+		exec_commands(f'git stash')
+
+	curr_branch = exec_commands(f'git branch --show-current').strip()
+	if curr_branch != branch_from:
+		exec_commands(f'git checkout {branch_from}')
+
+	exec_commands('git pull')
+
+def try_update(startup_command: str, branch_from: str) -> bool:
+	cur_ver = get_current_commit()
+	last_ver = get_commit_from_git(branch_from)
 	res = cur_ver != last_ver
 	if res:
-		pull_latest_version(soft_path, git_repo_url, prod_branch)
+		pull_last_version(branch_from)
 	return res
 
-def process(soft_path: str, startup_command: str, git_repo_url: str, prod_branch: str, allow_shut_down: bool, interval: int, pipe: Popen , kwargs) -> None:
-	Timer(args.mins * 60, process, kwargs=kwargs).start()
-	updated = try_update(soft_path, startup_command, git_repo_url, prod_branch)
+timer: Timer = None
+def process(pipe: Popen, startup_command: str, prod_branch: str, allow_shut_down: bool, interval: int, kwargs) -> None:
+	global timer
+	timer = Timer(args.mins * 60, process, kwargs=kwargs)
+	timer.start()
+	updated = try_update(startup_command, prod_branch)
 	if updated and allow_shut_down and pipe is not None:
 		pipe.terminate()
 		pipe = None
 	if pipe is None:
-		pipe = Popen(startup_command.split(), shell=True, cwd=soft_path)
+		pipe = Popen(startup_command.split(), shell=True, cwd=running_context.soft_path)
 
 if __name__ == '__main__':
 	from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -50,16 +71,16 @@ if __name__ == '__main__':
 	parser.add_argument('-m', '--mins', default=60, type=int, help='interval in minutes to check for update')
 	parser.add_argument('-dsd', '--disallow-shut-down', action='store_true', help='disallow to shutdown software if new version found')
 	args = parser.parse_args()
-	pipe: Popen = None
+	running_context.git_repo_url = args.git
+	running_context.soft_path = args.path
 	kwargs = {
-		'soft_path': args.path,
+		'pipe': None,
 		'startup_command': args.cmd,
-		'git_repo_url': args.git,
 		'prod_branch': args.branch,
 		'allow_shut_down': not args.disallow_shut_down,
 		'interval': args.mins,
-		'pipe': pipe,
 	}
 	kwargs['kwargs'] = kwargs # kwargs is kek:)
-	process(**kwargs) # start processing
-	input('Process starting, press any key to shut down')
+	process(**kwargs) # first call
+	input('Process starting, press any key to shut down\n')
+	timer.cancel()
