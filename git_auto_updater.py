@@ -11,7 +11,7 @@ running_context = RunningContext()
 def exec_commands(*args: str) -> str or list[str]:
 	results: list[str] = []
 	for command in args:
-		results.append(check_output(command.split(), shell=True, cwd=running_context.soft_path).decode('utf-8'))
+		results.append(check_output(command, shell=True, cwd=running_context.soft_path).decode('utf-8'))
 	return results if len(results) > 1 else results[0]
 
 def get_current_commit() -> str:
@@ -59,7 +59,7 @@ def process(pipe: Popen, startup_command: str, prod_branch: str, allow_shut_down
 		pipe.terminate()
 		pipe = None
 	if pipe is None:
-		pipe = Popen(startup_command.split(), shell=True, cwd=running_context.soft_path)
+		pipe = Popen(startup_command, shell=True, cwd=running_context.soft_path)
 
 if __name__ == '__main__':
 	from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
