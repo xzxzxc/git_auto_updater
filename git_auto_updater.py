@@ -117,7 +117,7 @@ def main():
     running_context.git_repo_url = args.git
     running_context.prod_branch = args.branch
     running_context.interval_sec = 60 * args.mins
-    running_context.update_action = UpdateAction[args.update_action]
+    running_context.update_action = UpdateAction[args.update_action.upper().replace('-', '_')]
 
     try:
         process()
